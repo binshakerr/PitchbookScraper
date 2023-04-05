@@ -22,27 +22,47 @@ def get_soup(url):
 def scrape_pitchbook_profile(url):
     details = {}
     details["url"] = url
+    soup = get_soup(url)
 
     try:
-        soup = get_soup(url)
         details['name'] = soup.find('h3').text.replace("Overview","").strip()
         details["description"] = soup.find("div",class_="pp-description").find("p",class_="pp-description_title").text.strip()
-    except:
+    except Exception as e:
+        print(e)
         pass
 
     return details
+
+def scrape_all_profiles():
+    df = pd.read_csv("pitchbook_profiles.csv")
+    urls = df["url"].tolist()
+
+    with multiprocessing.Pool(processes=12) as pool:
+        results = pool.map(scrape_pitchbook_profile, urls[:4])
+    save_profile_details(results)    
+    
+
+def save_profile_details(results):
+    dff = pd.DataFrame(results)
+    dff.to_csv("pitchbook_profiles_details.csv", index=False)
+
+
+def save_profiles(result):
+     df = pd.DataFrame(result, columns=["url"])
+     df.to_csv("pitchbook_profiles.csv", index=False)
+
 
 
 ### METHOD 1: BRUTE FORCE SEARCH
 
 def scrape_search_results(keyword):
     url = "https://pitchbook.com/profiles/search?q=" + keyword
-    soup = get_soup(url)
-    results_container = soup.find("ul", class_="profile-list")
     print("scraping keyword: " + keyword) 
+    soup = get_soup(url)
     results = []
-    
+
     try:
+        results_container = soup.find("ul", class_="profile-list")
         li_container = results_container.find_all("li")
         for li in li_container:
             profile_url = "https://pitchbook.com" + li.find("a")["href"]
@@ -66,30 +86,45 @@ def prepare_keywords():
 def scrape_all_search_results():
     keywords = prepare_keywords()
     with multiprocessing.Pool(processes=10) as pool:
-        results = pool.map(scrape_search_results, keywords)
+        results = pool.map(scrape_search_results, keywords[:5]) # only 5 keywords for testing, remove this in production 
     results = [item for sublist in results for item in sublist] # flat map the results list
-    results = list(set(results)) # remove duplicates
+    results = list(set(results))                                # remove duplicates
     return results
 
 
-def scrape_all_profiles():
-    df = pd.read_csv("pitchbook_profiles.csv")
-    urls = df["url"].tolist()
 
-    with multiprocessing.Pool(processes=12) as pool:
-        results = pool.map(scrape_pitchbook_profile, urls[:4])
-    save_profile_details(results)    
+# METHOD 2: SEARCH ENGINES 
+
+def srcape_duckduckgo(keyword):
+    url = "https://html.duckduckgo.com/html/?q=" + keyword
+    print("scraping duckduckgo for keyword: " + keyword)
+    soup = get_soup(url)
+    result = []
+
+    try:
+        links_container = soup.find_all("a", class_="result__snippet")
+        for link in links_container:
+            profile_url = link["href"]
+            result.append(profile_url)
+    except Exception as e:
+        print(e)
+        pass
     
-
-def save_profile_details(results):
-    dff = pd.DataFrame(results)
-    dff.to_csv("pitchbook_profiles_details.csv", index=False)
+    return result
 
 
-def save_profiles(result):
-     df = pd.DataFrame(result, columns=["url"])
-     df.to_csv("pitchbook_profiles.csv", index=False)
+def scrape_all_duckduckgo_results():
+    keywords = prepare_keywords()
+    keywords = ["site:pitchbook.com/profiles " + keyword for keyword in keywords]
+    with multiprocessing.Pool(processes=10) as pool:
+        results = pool.map(srcape_duckduckgo, keywords[:5])         # only 5 keywords for testing, remove this in production 
+    results = [item for sublist in results for item in sublist]     # flat map the results list
+    results = list(set(results))                                    # remove duplicates
+    results = [x for x in results if "pitchbook.com/profiles" in x] # filter actual profiles to exclude ads 
+    return results
+
 
 
 if __name__ == "__main__":
-    scrape_all_profiles()
+    result = scrape_all_duckduckgo_results()
+    print(result)
