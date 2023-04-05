@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 import string
 import multiprocessing
 import pandas as pd
+import SitemapScraper as sitemap_scraper
 
 load_dotenv()
 PROXY = os.getenv('PROXY')
@@ -125,6 +126,23 @@ def scrape_all_duckduckgo_results():
 
 
 
+# METHOD 3: SITEMAP SCRAPING:
+
+def scrape_sitemap():
+    # get all the urls from the sitemap
+    urls = sitemap_scraper.scrape_sitemap("https://pitchbook.com/sitemap.xml")
+    # get all urls from gz files
+    public_profiles_urls = []
+    
+    for url in urls [:5]:
+        if 'public-profiles' in url:
+            public_profiles_urls += sitemap_scraper.download_and_extract_gz_file(url)
+
+    return public_profiles_urls
+
+
+
 if __name__ == "__main__":
-    result = scrape_all_duckduckgo_results()
-    print(result)
+    result = scrape_sitemap()
+    df = pd.DataFrame(result, columns=["url"])
+    df.to_csv("pitchbook_profiles.csv", index=False)
